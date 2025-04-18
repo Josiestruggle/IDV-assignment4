@@ -1,1 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    .tooltip {
+      position: absolute;
+      padding: 8px;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      pointer-events: none;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+    .legend {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+    }
+  </style>
+  <!-- Keep your existing font-face style -->
+</head>
+<body>
+    <svg></svg>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <div id="tooltip" class="tooltip"></div>
 
+<script>
+let width = 1000, height = 600;
+
+let svg = d3.select("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`);
+
+// Add title and subtitle
+svg.append("text")
+    .attr("x", width/2)
+    .attr("y", 30)
+    .attr("text-anchor", "middle")
+    .style("font-size", "20px")
+    .text("Assignment 4: Singapore population choropleth 2024");
+
+svg.append("text")
+    .attr("x", width/2)
+    .attr("y", 50)
+    .attr("text-anchor", "middle")
+    .style("font-size", "14px")
+    .text("Ren Junyao");
+
+Promise.all([
+    d3.json("https://chi-loong.github.io/IDV/assignments/sgmap.json"),
+    d3.csv("https://raw.githubusercontent.com/Josiestruggle/IDV-assignment4/main/SGpopulation2024cleanup.csv")
+]).then(data => {
+
+    let mapData = data[0].features;
+    let popData = data[1];
+
+    // Merge data
+    mapData.forEach(d => {
+        let subzone = popData.find(e => e.Subzone.toUpperCase() === d.properties.Name);
+        d.popdata = subzone ? +subzone.Population : 0;
+    });
+
+    // Red color scheme with 8 classes
+    const colorScale = d3.scaleThreshold()
+        .domain([6000, 12000, 18000, 24000, 30000, 360000, 420000])
+        .range([
+            "#FFE5E5",
+            "#FFB3B3",
+            "#FF8080",
+            "#FF4D4D",
+            "#FF1A1A",
+            "#E60000",
+            "#B30000",
+            "#800000"
+        ]);
+
+    const projection = d3.geoMercator()
+        .center([103.851959, 1.290270])
+        .fitExtent([[20, 80], [980, 580]], data[0]);
+
+    const geopath = d3.geoPath().projection(projection);
+
+    // Draw districts
+    svg.append("g")
+        .selectAll("path")
+        .data(mapData)
+        .join("path")
+        .attr("d", geopath)
+        .attr("stroke", "#333")
+        .attr("stroke-width", 0.5)
+        .attr("fill", d => colorScale(d.popdata))
+        .on("mouseover", function(event, d) {
+            d3.select(this).attr("stroke-width", 2);
+            tooltip.style("visibility", "visible")
+                .html(`<strong>${d.properties.Name}</strong><br/>Population: ${d3.format(",")(d.popdata)}`)
+                .style("left", `${event.pageX + 10}px`)
+                .style("top", `${event.pageY + 10}px`);
+        })
+        .on("mouseout", function() {
+            d3.select(this).attr("stroke-width", 0.5);
+            tooltip.style("visibility", "hidden");
+        });
+
+    // Add legend
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width - 200}, ${height - 200})`);
+
+    const legendRect = legend.selectAll("rect")
+        .data(colorScale.range())
+        .join("rect")
+        .attr("x", 0)
+        .attr("y", (d, i) => i * 20)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", d => d);
+
+    const legendText = legend.selectAll("text")
+        .data(colorScale.domain())
+        .join("text")
+        .attr("x", 25)
+        .attr("y", (d, i) => i * 20 + 9)
+        .text((d, i) => {
+            const lower = i === 0 ? 0 : colorScale.domain()[i - 1];
+            return `${d3.format(",")(lower)} - ${d3.format(",")(d)}`;
+        })
+        .style("dominant-baseline", "middle");
+
+    // Add final legend label for maximum value
+    legend.append("text")
+        .attr("x", 25)
+        .attr("y", colorScale.domain().length * 20 + 9)
+        .text(`${d3.format(",")(colorScale.domain().at(-1))}+`)
+        .style("dominant-baseline", "middle");
+
+    // Tooltip setup
+    const tooltip = d3.select("#tooltip");
+});
+</script>
+</body>
+</html>
